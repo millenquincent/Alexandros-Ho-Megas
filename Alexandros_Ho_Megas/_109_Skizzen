@@ -1,0 +1,605 @@
+import requests
+import os
+import pandas as pd
+import mysql.connector
+import numpy as np
+import time
+import yfinance as yf
+import datetime
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from datetime import date
+
+from _103_Dicunt_Funktionen import _1002
+from _108_MySQL_Funktionen import Tabellen_Info, Tabelle_ausgeben, PK_Name_wiedergeben, Tabelle_Spaltennamen_ausgeben
+#Beispieldaten___________________________________________________________________________________________________________________
+
+data_0 = np.array([1,2,3,4,5])
+Tage    = [datetime.date(2023, 11, 17), datetime.date(2023, 11, 20), datetime.date(2023, 11, 21), datetime.date(2023, 11, 22), datetime.date(2023, 11, 23), datetime.date(2023, 11, 24), datetime.date(2023, 11, 27), datetime.date(2023, 11, 28), datetime.date(2023, 11, 29)]
+Tage    = [datetime.date(2023, 11, 15), datetime.date(2023, 11, 16)]
+Dicunt  = np.array([36.4254, 36.6708, 36.9162, 37.1616, 37.407 , 37.6524, 37.8978,38.1432, 38.3886, 38.634 ])
+Dicunt  = [36.4254, 36.6708]
+data_2 = pd.read_csv('C:/01_usa_secureties/US7427181091_PG.csv').Close.to_numpy()
+
+#Nebenvariablen_____________________________________________________________________________________________________________
+Δperioden   = 10
+
+Δwertpapier = 'VZ'
+Δuser       = 'root'
+Δpassword   = '--'
+Δport       = '3306'
+Δdatabase   = '01_usa_securities'
+Δtabelle    = 'neu_vz'
+Δtabelle_Close    = 'neu_vz'
+ΔTabelle_Dicunt    = 'us58933y1055_mrk_dicunt'
+Δtab_Handelstage = '_00_handelstage'
+Δspa_Handelstage = 'handelstage'
+pfad       = 'C:/01_usa_secureties'
+
+Δdatabase_Close    = '01_usa_securities'
+Δdatabase_Dicunt   = '01_usa_securities_dicunt'
+Δdatabase_Extra    = '01_usa_securities_extra'
+
+ΔListe_Dicunt_Funktionen = [_1002]
+ΔDicunt_Funktion         = ΔListe_Dicunt_Funktionen[0]
+
+
+#Datenverbindung_______________________________________________________________________________________________________
+Δconnection      = mysql.connector.connect(host='localhost',user='root',password='--',port='3306')
+
+#Hilfsfunktionen_________________________________________________________________________________________________________________
+Tabelle = Tabelle_Spaltennamen_ausgeben(Δconnection,Δdatabase_Dicunt,ΔTabelle_Dicunt)
+Tabelle = [['spalte1','spalte2','spalte3'],[1,2,3,4],[None,None,100,200],['m','w','l','s']]
+
+def Tabelle_ausgeben(Connection,Database,Tabelle):
+    Connection, Cursor  = Connection, Connection.cursor()
+
+    Cursor.execute (f'SELECT * FROM {Database}.{Tabelle}')
+    CSCO          = Cursor.fetchall()
+    Tabellenliste = []
+    for i in range(0,len(CSCO[0])): Tabellenliste.append(np.array([row[i] for row in CSCO]))
+    return Tabellenliste
+#Tabelle = Tabelle_ausgeben(Δconnection,'01_usa_securities','us0970231058_ba')
+
+
+
+def Name_und_Spalten_ausgeben(Connection, Database, Tabelle):
+    import warnings
+    warnings.simplefilter("ignore", UserWarning)
+    Connection, Cursor = Connection, Connection.cursor()
+
+    Cursor.execute(f"DESCRIBE {Database}.{Tabelle}")
+    column_info = Cursor.fetchall()
+    columns = [info[0] for info in column_info]
+
+    df = pd.read_sql(f"SELECT * FROM {Database}.{Tabelle}", Connection)
+    Spaltenliste = [np.array(columns)]
+    Tabellenliste = [df[col].to_numpy() for col in columns]
+
+    return Spaltenliste + Tabellenliste
+#print(Name_und_Spalten_ausgeben(Δconnection, '01_usa_securities', 'us0970231058_ba'))
+
+
+def Tabelle_ausgeben(Connection,Database,Tabelle):
+    Connection, Cursor  = Connection, Connection.cursor()
+
+    Cursor.execute(f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{Database}' AND TABLE_NAME = '{Tabelle}'")
+    Spalten = Cursor.fetchall()
+    Spaltenliste = [np.array([row[0] for row in Spalten])]
+
+    Cursor.execute (f'SELECT * FROM {Database}.{Tabelle}')
+    CSCO          = Cursor.fetchall()
+    Tabellenliste = []
+    for i in range(0,len(CSCO[0])): Tabellenliste.append(np.array([row[i] for row in CSCO]))
+
+    return Spaltenliste+Tabellenliste
+#print(Tabelle_ausgeben(Δconnection,'01_usa_securities','us0970231058_ba'))
+
+
+Sentiment_Skala = {0:'Bleibt gleich',
+                   1:'schwankt etwas hoch runter, bleibt aber gleich',
+                   2:'schwankt etwas aber schon sichtbar mehr in die eine Richtung',
+                   3:'geht mit weniger Schwankung sichtbar mehr in die eine Richtung',
+                   4:'sichtbar in eine richtung, mehrere ereignisse die dies Verursachen',
+                   5:'Bleibt gleich, Kursexplosion, dann wieder gleich'}
+
+Marktreaktionen        = []
+Branchenreaktionen     = []
+Unternehmensreaktionen = []
+
+#der forecast welches den Tag der Hauptversammlung überschneidet wird um einen faktor oder Wert gesteigert
+def Dicunt_USBanken_GS(Close_List, Dividenden_Datum):
+    pass
+
+
+def Dreier_Folgemuster2(npli,Obere_Schranke,Untere_Schranke):
+    from _100_Grund_Funktionen  import Delete_List_Wert
+    from _101_Listen_Funktionen import Liste_in_Teillisten_bringen_unkonsolidiert
+    from _103_Dicunt_Funktionen import Renditenliste
+
+    def Absolute_Häufigkeit_Auftreten_von_x_y(Liste,Zweiermuster_0_1_2):
+        Len_Liste = len(Liste)
+        Anzahl_X_X = 0
+        Del_liste = []
+        for i in range(0,Len_Liste):
+            if np.array_equal(Liste[i], Zweiermuster_0_1_2):
+                Anzahl_X_X += 1
+                Del_liste.append(i)
+        Gekürzte_Liste = Delete_List_Wert(Liste,Del_liste)
+        return Anzahl_X_X, Gekürzte_Liste
+
+    Rendite_liste               = Renditenliste(npli)
+    Renditenliste_gemustert     = np.where(Rendite_liste > Obere_Schranke, 2, np.where(Rendite_liste > Untere_Schranke, 1, 0))
+    Renditenteilliste_gemustert = Liste_in_Teillisten_bringen_unkonsolidiert(Renditenliste_gemustert,2)
+    Anzahl_0_0,Anzahl_0_1,Anzahl_0_2,Anzahl_1_0,Anzahl_1_1,Anzahl_1_2,Anzahl_2_0,Anzahl_2_1,Anzahl_2_2 = 0,0,0,0,0,0,0,0,0
+
+    Anzahl_0_0 = Absolute_Häufigkeit_Auftreten_von_x_y(Renditenteilliste_gemustert,[0,0])
+    Anzahl_0_1 = Absolute_Häufigkeit_Auftreten_von_x_y(Anzahl_0_0[1],[0,1])
+    Anzahl_0_2 = Absolute_Häufigkeit_Auftreten_von_x_y(Anzahl_0_1[1],[0,2])
+    Anzahl_1_0 = Absolute_Häufigkeit_Auftreten_von_x_y(Anzahl_0_2[1],[1,0])
+    Anzahl_1_1 = Absolute_Häufigkeit_Auftreten_von_x_y(Anzahl_1_0[1],[1,1])
+    Anzahl_1_2 = Absolute_Häufigkeit_Auftreten_von_x_y(Anzahl_1_1[1],[1,2])
+    Anzahl_2_0 = Absolute_Häufigkeit_Auftreten_von_x_y(Anzahl_1_2[1],[2,0])
+    Anzahl_2_1 = Absolute_Häufigkeit_Auftreten_von_x_y(Anzahl_2_0[1],[2,1])
+    Anzahl_2_2 = Absolute_Häufigkeit_Auftreten_von_x_y(Anzahl_2_1[1],[2,2])
+
+    Dictionary = {'0,0':Anzahl_0_0[0],'0,1':Anzahl_0_1[0],'0,2':Anzahl_0_2[0],'1,0':Anzahl_1_0[0],'1_1':Anzahl_1_1[0],'1_2':Anzahl_1_2[0],'2_0':Anzahl_2_0[0],'2_1':Anzahl_2_1[0],'2_2':Anzahl_2_2[0]}
+    return Dictionary
+print(Dreier_Folgemuster2(data_2,0.003,-0.003)) # unterschied ist dass es in [1,2,1,0]drei statt zwei abschnitte berücksichtigt
+
+def Optimale_Schranken_finden(npli):
+    Liste_Schranken = []
+    Liste_Werte     = []
+ 
+    for i in np.arange(0,0.04,0.01):
+        for t in np.arange(0,0.04,0.01):
+            Werte_liste = Dreier_Folgemuster2(npli,i,t)
+
+            o      = Werte_liste
+
+            values = np.array(list(o.values()))
+            max_value_index = np.argmax(values)
+            values_excluding_max = np.delete(values, max_value_index)
+
+            Standardabweichung_alle_außer_höchster_Wert = np.std(values_excluding_max)
+            #Maximalmögliche_Standardabweichung_alle_außer_höchster_Wert = (max(values)-min(values))/2
+            Mittelwert_alle_außer_höchster_Wert         = np.mean(values_excluding_max)
+            Höchster_Wert                               = values[max_value_index]
+            Unterschied_Höchster_Mittelwert             = Höchster_Wert - Mittelwert_alle_außer_höchster_Wert
+
+            Anteil = np.sum(values_excluding_max)/np.sum(values)
+
+            Liste_Schranken.append([i,t])
+            #Liste_Werte.append([Standardabweichung_alle_außer_höchster_Wert,Unterschied_Höchster_Mittelwert])
+            Liste_Werte.append([Standardabweichung_alle_außer_höchster_Wert,Unterschied_Höchster_Mittelwert,Anteil])
+
+    return Liste_Werte, Liste_Schranken
+#print(Optimale_Schranken_finden(data_2))
+#data = Optimale_Schranken_finden(data_2)[0]
+
+def plotting_3d(Punkteliste):
+    x_values = [point[0] for point in Punkteliste]
+    y_values = [point[1] for point in Punkteliste]
+    z_values = [point[2] for point in Punkteliste]
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(x_values, y_values, z_values, c='blue', marker='o')
+    ax.set_xlabel('Std')
+    ax.set_ylabel('Unterschied')
+    ax.set_zlabel('Anteil')
+    ax.set_title('2Folgemuster')
+    plt.show()
+#print(plotting_3d(data))
+
+def plotting_4d():
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    import numpy as np
+
+    # Sample data with 4 dimensions (x, y, z, color)
+    data = np.array([
+        [1, 2, 3, 4],
+        [2, 3, 4, 5],
+        [3, 4, 5, 6],
+        [4, 5, 6, 7]
+    ])
+
+    x, y, z, colors = data[:, 0], data[:, 1], data[:, 2], data[:, 3]
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    scatter = ax.scatter(x, y, z, c=colors, cmap='viridis')
+
+    # Add color bar
+    cbar = plt.colorbar(scatter)
+    cbar.set_label('4th Dimension')
+
+    plt.show()
+
+def plotting_2d(x):
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    plt.plot(x)
+    plt.show()
+
+npli = data_2[2500:2750]
+def plotting_liste_und_Funktion():
+    def Lin_Regression_Funktion(npli):
+        x = np.arange(len(npli))
+        Koeffizienten = np.polyfit(x, npli, 1)
+        Steigung, Achsenabschnitt = Koeffizienten
+        return Achsenabschnitt, Steigung
+    Achsenabschnitt = Lin_Regression_Funktion(npli)[0]
+    Steigung        = Lin_Regression_Funktion(npli)[1]
+
+    y = npli
+    z = [Steigung*i + Achsenabschnitt for i in range(0,len(npli))]
+    x = [i for i in range(0,len(npli))]
+
+    plt.plot(x, y, color='blue')
+    plt.plot(x, z, linestyle='dashed', color='red')
+    plt.grid(True)
+    plt.show()
+#plotting_liste_und_Funktion()
+    
+#TradingMaschine_______________________________________________________________________________________________________
+
+Date         = np.array([date(2023, 10, 16),date(2023, 10, 17),date(2023, 10, 18),date(2023, 10, 19),date(2023, 10, 20),date(2023, 10, 21),date(2023, 10, 22),date(2023, 10, 23),date(2023, 10, 24),date(2023, 10, 25),])
+X_Achse      = np.array([0,1,2  ,3  ,4  ,5,6,7,8,9])
+Close        = np.array([3,4,5  ,4  ,3  ,2,4,5,6,6])
+Unten_Grenze  = np.array([5,1,1.8,2.6,3.1,4,0,6,7,0])
+Oben_Grenze = np.array([6,5,3  ,4  ,5  ,6,1,8,2,9])
+Daten_pd = pd.DataFrame({'index': X_Achse, 'date': Date, 'close': Close, 'oben_grenze': Oben_Grenze, 'unten_grenze': Unten_Grenze})
+
+# plt.plot(Close,        color='black')
+# plt.plot(Unten_Grenze, color='red'  )
+# plt.plot(Oben_Grenze,  color='green')
+# plt.show()
+
+
+def Liste_Koordinatenpaare_erstellen(X_Achse_npli, Y_Achse_npli):
+    Koordinaten_npli       = np.column_stack((X_Achse_npli, Y_Achse_npli))
+    Koordinaten_Paare_npli = np.stack((Koordinaten_npli[:-1], Koordinaten_npli[1:]), axis=1)
+    return Koordinaten_Paare_npli
+#print(Liste_Koordinatenpaare_erstellen(X_Achse, Close))
+
+Close_Koordinaten_Paare        = Liste_Koordinatenpaare_erstellen(X_Achse, Close       )
+Oben_Grenze_Koordinaten_Paare  = Liste_Koordinatenpaare_erstellen(X_Achse, Oben_Grenze )
+Unten_Grenze_Koordinaten_Paare = Liste_Koordinatenpaare_erstellen(X_Achse, Unten_Grenze)
+
+def Schnittpunkt_zweier_Geraden(Gerade1,Gerade2):
+    m1 = (Gerade1[1][1]-Gerade1[0][1])/(Gerade1[1][0]-Gerade1[0][0])
+    m2 = (Gerade2[1][1]-Gerade2[0][1])/(Gerade2[1][0]-Gerade2[0][0])
+    n1 = Gerade1[0][1]-m1*Gerade1[0][0]
+    n2 = Gerade2[0][1]-m2*Gerade2[0][0]
+
+    X_Wert = (n1-n2)/(m2-m1)
+    Y_Wert = n1 +m1*X_Wert
+    return np.array([X_Wert,Y_Wert])
+#print(Schnittpunkt_zweier_Geraden([[0,0],[3,0]],[[10,11],[11,0]]))
+
+def Schnittpunkt_zweier_Geraden_Short_Long(Gerade1, Gerade2, Short_Long):
+    #Für short True, für long False
+    m1 = (Gerade1[1][1]-Gerade1[0][1])/(Gerade1[1][0]-Gerade1[0][0])
+    m2 = (Gerade2[1][1]-Gerade2[0][1])/(Gerade2[1][0]-Gerade2[0][0])
+    n1 = Gerade1[0][1]-m1*Gerade1[0][0]
+    n2 = Gerade2[0][1]-m2*Gerade2[0][0]
+
+    X_Wert = (n1-n2)/(m2-m1)
+    Y_Wert = n1 +m1*X_Wert
+
+    if Short_Long == True:
+        return np.array([X_Wert,Y_Wert,1])
+    if Short_Long == False:
+        return np.array([X_Wert,Y_Wert,0])
+#print(Schnittpunkt_zweier_Geraden_Short_Long([[0,0],[3,0]],[[10,11],[11,0]],True))
+
+def Testen_ob_zwischen_X_Koordinaten_liegt(Koordinatenpaar, Schnittpunkt):
+    if Schnittpunkt[0] >= Koordinatenpaar[0][0] and Schnittpunkt[0] <= Koordinatenpaar[1][0]: return True
+#print(Testen_ob_zwischen_X_Koordinaten_liegt([[0,3],[1,4]],[0.5,1]))
+    
+def Testen_ob_Gerade1_Gerade2_schneidet(Koordinatenpaar1,Koordinatenpaar2):
+    if   Koordinatenpaar1[0][1] > Koordinatenpaar2[0][1] and Koordinatenpaar1[1][1] < Koordinatenpaar2[1][1]:
+        return True
+    elif Koordinatenpaar1[0][1] < Koordinatenpaar2[0][1] and Koordinatenpaar1[1][1] > Koordinatenpaar2[1][1]:
+        return True
+    else: 
+        return False
+#print(Testen_ob_Gerade1_Gerade2_schneidet([[4,7],[5,6]],[[4,2],[5,6]]))
+    
+def Testen_ob_Gerade1_Gerade2_von_oben_schneidet_wenn_schneidet(Koordinatenpaar1,Koordinatenpaar2):
+    if   Koordinatenpaar1[0][1] > Koordinatenpaar2[0][1] and Koordinatenpaar1[1][1] < Koordinatenpaar2[1][1]:
+        return True
+    elif Koordinatenpaar1[0][1] < Koordinatenpaar2[0][1] and Koordinatenpaar1[1][1] > Koordinatenpaar2[1][1]:
+        return False
+#print(Testen_ob_Gerade1_Gerade2_von_oben_schneidet_wenn_schneidet([[4,7],[5,6]],[[4,2],[5,6]]))
+
+def Testen_ob_Gerade1_Gerade2_von_oben_schneidet_wenn_schneidet(Koordinatenpaar1,Koordinatenpaar2):
+    if    Koordinatenpaar1[0][1] > Koordinatenpaar2[0][1] and Koordinatenpaar1[1][1] <= Koordinatenpaar2[1][1]:
+          return 0
+    if    Koordinatenpaar1[0][1] < Koordinatenpaar2[0][1] and Koordinatenpaar1[1][1] <= Koordinatenpaar2[1][1]:
+        return 1
+    else: return 2
+#print(Testen_ob_Gerade1_Gerade2_von_oben_schneidet_wenn_schneidet([[4,7],[5,6]],[[4,2],[5,6]]))
+    
+def X_Achse_zu_Date(Index,Daten_pd):
+    Index = np.where(Daten_pd['index'].values == Index)[0]
+    Date = Daten_pd['date'][Index]
+    return Date
+#print(X_Achse_zu_Date(2,Daten_pd))
+    
+
+def Schnittpunkte_in_Sections_finden(Liste_Punktpaare,Liste_Parameterpaare,Liste_Sectionpaare):
+    #Liste_Punktpaare= [[4,7],[5,6]] Liste_Parameterpaare= [(4,7),(5,6)]4steigung 7achsenabschnitt, Liste_Sectionpaare= [[0,1],[1,2]]
+    #ob Punktpaare und Parameterpaare sich im Sectionpaar treffen
+
+    Liste_Schnittpunkte_in_Sections = []
+    for i in range(0,len(Liste_Punktpaare)):
+        Preis_Werte     = [Liste_Punktpaare[i][0],Liste_Punktpaare[i][1]]
+        Parameter_Werte = [Liste_Parameterpaare[i][0],Liste_Parameterpaare[i][1]]
+        Section         = [Liste_Sectionpaare[i][0],Liste_Sectionpaare[i][1]]
+        Wert1_Y = Parameter_Werte[0]*Section[0]+Parameter_Werte[1]
+        Wert2_Y = Parameter_Werte[0]*Section[1]+Parameter_Werte[1]
+        Wert1_X = Section[0]
+        Wert2_X = Section[1]
+
+        Schnittpunkt = Schnittpunkt_zweier_Geraden([[Wert1_X,Wert1_Y],[Wert2_X,Wert2_X]],[[Wert1_X,Preis_Werte[0]],[Wert2_X,Preis_Werte[1]]])
+        if Section[0] < Schnittpunkt[0] <= Section[1]: Liste_Schnittpunkte_in_Sections.append(Schnittpunkt)
+    return Liste_Schnittpunkte_in_Sections
+#print(Schnittpunkte_in_Sections_finden([[4,7],[5,6]],[(4,7),(5,6)],[[0,1],[1,2]]))
+
+
+def Liste_ausgeben_Short_Long_Momente(Close_Koordinaten_Paare, Oben_Grenze_Koordinaten_Paare, Unten_Grenze_Koordinaten_Paare):
+    #Erstellt Liste von schnittpunkten(X;Y;1/0) letzte steht für 1=Short,0=Long, wo Oben_Grenze, Close von oben schneidet
+
+    Liste_Long_Momente  = []  
+    for i in range(0,len(Close_Koordinaten_Paare)):
+        Close_Koordinaten_Paar, Oben_Grenze_Koordinaten_Paar = Close_Koordinaten_Paare[i], Oben_Grenze_Koordinaten_Paare[i]
+
+        if Testen_ob_Gerade1_Gerade2_schneidet(Close_Koordinaten_Paar, Oben_Grenze_Koordinaten_Paar) == True:
+            if Testen_ob_Gerade1_Gerade2_von_oben_schneidet_wenn_schneidet(Close_Koordinaten_Paar, Oben_Grenze_Koordinaten_Paar) == True:
+                print(Close_Koordinaten_Paar, Oben_Grenze_Koordinaten_Paar)
+                Schnittpunkt = Schnittpunkt_zweier_Geraden_Short_Long(Close_Koordinaten_Paar, Oben_Grenze_Koordinaten_Paar, True)
+                Liste_Long_Momente.append(Schnittpunkt)
+    
+    Liste_Short_Momente = []
+    for i in range(0,len(Close_Koordinaten_Paare)):
+        Close_Koordinaten_Paar, Unten_Grenze_Koordinaten_Paar = Close_Koordinaten_Paare[i], Unten_Grenze_Koordinaten_Paare[i]
+
+        if Testen_ob_Gerade1_Gerade2_schneidet(Close_Koordinaten_Paar, Unten_Grenze_Koordinaten_Paar) == True:
+            if Testen_ob_Gerade1_Gerade2_von_oben_schneidet_wenn_schneidet(Close_Koordinaten_Paar, Unten_Grenze_Koordinaten_Paar) == False:
+                Schnittpunkt = Schnittpunkt_zweier_Geraden_Short_Long(Close_Koordinaten_Paar, Unten_Grenze_Koordinaten_Paar, False)
+                Liste_Short_Momente.append(Schnittpunkt)
+    
+
+
+
+    return np.array(Liste_Long_Momente, dtype='float16'), np.array(Liste_Short_Momente, dtype='float16')
+#print(Liste_ausgeben_Short_Long_Momente(Close_Koordinaten_Paare, Oben_Grenze_Koordinaten_Paare, Unten_Grenze_Koordinaten_Paare))
+
+
+
+def Liste_ausgeben_Short_Long_Momente(Close_Koordinaten_Paare, Oben_Grenze_Koordinaten_Paare, Unten_Grenze_Koordinaten_Paare):
+
+    New_list1 = []
+    for i in range(0,len(Close_Koordinaten_Paare)):
+        Schnittpunkt = Schnittpunkt_zweier_Geraden([Close_Koordinaten_Paare[i][0],Close_Koordinaten_Paare[i][1]],[Oben_Grenze_Koordinaten_Paare[i][0],Oben_Grenze_Koordinaten_Paare[i][0]])
+        if Testen_ob_Gerade1_Gerade2_von_oben_schneidet_wenn_schneidet([Close_Koordinaten_Paare[i][0],Close_Koordinaten_Paare[i][1]],[Oben_Grenze_Koordinaten_Paare[i][0],Oben_Grenze_Koordinaten_Paare[i][0]]) == True:
+            if Testen_ob_zwischen_X_Koordinaten_liegt(Close_Koordinaten_Paare[i],Schnittpunkt) == 0:
+                New_list1.append([Schnittpunkt,1])
+
+    New_list2 = []
+    for i in range(0,len(Close_Koordinaten_Paare)):
+        Schnittpunkt = Schnittpunkt_zweier_Geraden([Close_Koordinaten_Paare[i][0],Close_Koordinaten_Paare[i][1]],[Oben_Grenze_Koordinaten_Paare[i][0],Oben_Grenze_Koordinaten_Paare[i][0]])
+        if Testen_ob_Gerade1_Gerade2_von_oben_schneidet_wenn_schneidet([Close_Koordinaten_Paare[i][0],Close_Koordinaten_Paare[i][1]],[Oben_Grenze_Koordinaten_Paare[i][0],Oben_Grenze_Koordinaten_Paare[i][0]]) == True:
+            if Testen_ob_zwischen_X_Koordinaten_liegt(Close_Koordinaten_Paare[i],Schnittpunkt) == 1:
+                New_list2.append([Schnittpunkt,0])
+
+    return New_list1, New_list2
+#print(Liste_ausgeben_Short_Long_Momente(Close_Koordinaten_Paare, Oben_Grenze_Koordinaten_Paare, Unten_Grenze_Koordinaten_Paare))
+                
+
+
+
+
+#Friedhof________________________________________________________________________________________________________________________
+def Friedhof():
+    def VonXXXXXXXzuXXXXXXX_dicunt(Tabellenname_Close):
+        return Tabellenname_Close+'_dicunt'
+    #print(VonXXXXXXXzuXXXXXXX_dicunt(Δtabelle))
+
+    def Tabelle_erstellen_mit_Datentyp_und_Primärschlüssel(Connection, Database, Tabellenname, Spaltenname, Spaltendatentyp):
+        #from _108_MySQL_Funktionen import Datenbankverbindung
+        Connection, Cursor  = Connection, Connection.cursor()
+
+        create_table_query = f"""CREATE TABLE {Database}.{Tabellenname} ({Spaltenname} {Spaltendatentyp} PRIMARY KEY)"""
+        Cursor.execute(create_table_query)
+        Connection.commit()
+    #Tabelle_erstellen_mit_Datentyp_und_Primärschlüssel(Δconnection, '01_usa_securities_extra', 'xx', 'pp', 'DATE')
+
+    def Tabellennamen_Database_aufrufen(Connection, Database):
+        #gibt alle Tabellennamen der Database wieder in einer Liste
+        Connection, Cursor  = Connection, Connection.cursor()
+
+        Command1            = "SELECT table_name FROM information_schema.tables WHERE table_schema = %s"
+        Cursor.execute        (Command1 , (Database,))
+
+        Tabellennamen       = Cursor.fetchall()
+        Liste_Tabellennamen = []
+        for i in range(0,len(Tabellennamen)): Liste_Tabellennamen.append(Tabellennamen[i][0]) 
+
+        return Liste_Tabellennamen
+    #print(Tabellennamen_Database_aufrufen(Δconnection,Δdatabase_Close))
+
+    #Hauptvariablen_____________________________________________________________________________________________________________
+    ΔPK_Name = PK_Name_wiedergeben(Δconnection,Δdatabase_Close,Δtabelle_Close)
+    ΔPK_Name = 'Date'
+    ΔClose_Name = 'Close'
+    Δtabelle_Dicunt    = VonXXXXXXXzuXXXXXXX_dicunt('neu_vz')
+
+    #Funktionen______________________________________________________________________________________________________________________
+
+    def Dicunt_Tabellen_Initialisieren():
+        pass
+
+    def Für_jede_tabelle_in_DB1_Tabelle_in_DB2_erstellen(Connection, Database1, Database2):
+        #from _108_MySQL_Funktionen import Tabellennamen_Database_aufrufen, Datenbankverbindung, Tabelle_erstellen_mit_Datentyp_und_Primärschlüssel
+
+        Liste_Tabellen_aus_DB1                = Tabellennamen_Database_aufrufen(Connection, Database1)
+        Liste_Tabellen_aus_DB1_mit_dicunt     = [i + '_dicunt' for i in Liste_Tabellen_aus_DB1]
+        Liste_Tabellen_aus_DB2                = Tabellennamen_Database_aufrufen(Connection, Database2)
+        Noch_nicht_erstellte_Tabellen_inDB2   = list(set(Liste_Tabellen_aus_DB1_mit_dicunt) ^ set(Liste_Tabellen_aus_DB2))
+
+        Tabellennamen_für_DB2 = [i for i in Noch_nicht_erstellte_Tabellen_inDB2]
+        for i in range(0,len(Tabellennamen_für_DB2)):
+            Tabelle_erstellen_mit_Datentyp_und_Primärschlüssel(Connection, Database2, Tabellennamen_für_DB2[i],'date','DATE')
+    #Für_jede_tabelle_in_DB1_Tabelle_in_DB2_erstellen(Δconnection, Δdatabase_Close, Δdatabase_Dicunt)
+
+    def Nächste_Handelstage_finden(Connection, Database_Close, Tabelle_Close, Database_Extra, Tabelle_Handelstage, Spalte_Handelstage, Anzahl_nächster_Handelstage):
+        #from _108_MySQL_Funktionen import Tabelle_ausgeben
+        Connection, Cursor  = Connection, Connection.cursor()
+
+        Anzahl_nächster_Handelstage = Anzahl_nächster_Handelstage+1
+        Letzter_Tag                 = Tabelle_ausgeben(Connection, Database_Close, Tabelle_Close)[0][-1]
+        Command1                    = f"SELECT {Spalte_Handelstage} FROM {Database_Extra}.{Tabelle_Handelstage} WHERE {Spalte_Handelstage} > {Letzter_Tag} LIMIT {Anzahl_nächster_Handelstage}"
+        Cursor.execute                (Command1)
+        Folge_Datum                 = Cursor.fetchall()
+        Folge_Datum                 = [Folge_Datum[i][0] for i in range(1,Anzahl_nächster_Handelstage)]
+
+        return Folge_Datum
+    #Nächste_Handelstage_finden(Δconnection, Δdatabase_Close, Δtabelle, Δdatabase_Extra, Δtab_Handelstage, Δspa_Handelstage, Δperioden)
+
+    ΔHandelstage_Dicunt    = Nächste_Handelstage_finden(Δconnection, Δdatabase_Close, Δtabelle, Δdatabase_Extra, Δtab_Handelstage, Δspa_Handelstage, Δperioden)
+
+    def Eine_liste_in_Tabelle_hinzufügen(Connection,Database,Tabelle,Liste,Spaltenname):
+        for i in range(0,len(Liste)):
+            Wert    = Liste[i]
+
+            Connection, Cursor  = Connection, Connection.cursor()
+            Command1 = f"""
+                INSERT INTO {Database}.{Tabelle} ({Spaltenname})
+                VALUES (%s)
+                ON DUPLICATE KEY UPDATE
+                {Spaltenname} = %s;
+            """
+            values = (Wert, Wert)
+            
+            Cursor.execute(Command1, values)
+            Connection.commit()
+    #Eine_liste_in_Tabelle_hinzufügen(Δconnection,Δdatabase_Dicunt,Δtabelle_Dicunt,ΔHandelstage_Dicunt,ΔPK_Name)
+
+    def Spalte_von_Tabelle1_zu_Tabelle2_mittels_PK_hinzufügen(Connection,Database1,Tabelle1,PKSpalte1,Spalte1,Database2,Tabelle2,PKSpalte2,Spalte2):
+        from _108_MySQL_Funktionen import Spaltennamen_anzeigen
+        Connection, Cursor  = Connection, Connection.cursor()
+        Spaltentyp2 = 'DECIMAL (8,3)'
+
+        if Spalte2 not in Spaltennamen_anzeigen(Connection, Database2, Tabelle2):
+            Command1        = f"ALTER TABLE {Database2}.{Tabelle2} ADD COLUMN {Spalte2} {Spaltentyp2};"
+            Cursor.execute   (Command1)
+            Command2        = f"UPDATE {Database2}.{Tabelle2} JOIN {Database1}.{Tabelle1} ON {Database2}.{Tabelle2}.{PKSpalte1} = {Database1}.{Tabelle1}.{PKSpalte1} SET {Database2}.{Tabelle2}.{Spalte2} = {Database1}.{Tabelle1}.{Spalte1};"
+            Cursor.execute   (Command2)
+            Connection.commit()
+        else:
+            Command1        = f"UPDATE {Database2}.{Tabelle2} JOIN {Database1}.{Tabelle1} ON {Database2}.{Tabelle2}.{PKSpalte1} = {Database1}.{Tabelle1}.{PKSpalte1} SET {Database2}.{Tabelle2}.{Spalte2} = {Database1}.{Tabelle1}.{Spalte1};"
+            Cursor.execute   (Command1)
+            Connection.commit()
+    #Spalte_von_Tabelle1_zu_Tabelle2_mittels_PK_hinzufügen(Δconnection, Δdatabase_Close, Δtabelle,ΔPK_Name,ΔClose_Name, Δdatabase_Dicunt, Δtabelle_Dicunt,ΔPK_Name,ΔClose_Name)
+
+
+    def Dicunt_Tabellen_Aktualisieren():
+        pass
+
+    def Nächste_Handelstage_finden(Connection, Database_Close, Tabelle_Close, Database_Extra, Tabelle_Handelstage, Spalte_Handelstage, Anzahl_nächster_Handelstage):
+        #from _108_MySQL_Funktionen import Tabelle_ausgeben
+        Connection, Cursor  = Connection, Connection.cursor()
+
+        Anzahl_nächster_Handelstage = Anzahl_nächster_Handelstage+1
+        Letzter_Tag                 = Tabelle_ausgeben(Connection, Database_Close, Tabelle_Close)[0][-1]
+        Command1                    = f"SELECT {Spalte_Handelstage} FROM {Database_Extra}.{Tabelle_Handelstage} WHERE {Spalte_Handelstage} > {Letzter_Tag} LIMIT {Anzahl_nächster_Handelstage}"
+        Cursor.execute                (Command1)
+        Folge_Datum                 = Cursor.fetchall()
+        Folge_Datum                 = [Folge_Datum[i][0] for i in range(1,Anzahl_nächster_Handelstage)]
+
+        return Folge_Datum
+    #Nächste_Handelstage_finden(Δconnection, Δdatabase_Close, Δtabelle, Δdatabase_Extra, Δtab_Handelstage, Δspa_Handelstage, Δperioden)
+
+    def Dicunt_berechnen(Connection, Database, Tabelle, Perioden, Dicunt_Funktion):
+        #from _103_Dicunt_Funktionen import Lin_Regression_Gerade_vom_letzten_Wert_Dicunt
+        #from _108_MySQL_Funktionen import Tabelle_ausgeben
+        Connection, Cursor  = Connection, Connection.cursor()
+
+        Close = Tabelle_ausgeben(Connection, Database, Tabelle)[3]
+        Dicunt = Dicunt_Funktion(Close,Perioden)
+        return Dicunt
+    #Dicunt_berechnen(Δconnection, Δdatabase_Close, Δtabelle, Δperioden, ΔDicunt_Funktion)
+
+    ΔDicunt_Funktion       = Dicunt_berechnen(Δconnection, Δdatabase_Close, Δtabelle, Δperioden, ΔDicunt_Funktion)
+    ΔDicunt_Liste          = ΔDicunt_Funktion[0]
+    ΔDicunt_Code           = ΔDicunt_Funktion[1]
+    ΔDicunt_Liste_Datentyp = 'DECIMAL(8,3)'
+    ΔHandelstage_Dicunt    = Nächste_Handelstage_finden(Δconnection, Δdatabase_Close, Δtabelle, Δdatabase_Extra, Δtab_Handelstage, Δspa_Handelstage, Δperioden)
+
+    def Spalte_erstellen_wenn_nicht_gibt(Connection, Database, Tabelle, Neuer_Spaltenname, Neuer_Spaltentyp): 
+        from _108_MySQL_Funktionen import Spaltennamen_anzeigen
+        Connection, Cursor  = Connection, Connection.cursor()
+
+        if Neuer_Spaltenname not in Spaltennamen_anzeigen(Connection, Database, Tabelle):
+            Command = f'ALTER TABLE {Database}.{Tabelle} ADD COLUMN {Neuer_Spaltenname} {Neuer_Spaltentyp}'
+            Cursor.execute(Command)
+            Connection.commit()
+    #Spalte_erstellen_wenn_nicht_gibt(Δconnection, Δdatabase_Dicunt, Δtabelle_Dicunt, ΔDicunt_Code,ΔDicunt_Liste_Datentyp)
+
+    def Liste_zu_Tabelle_mittels_PK_hinzufügen(Connection,Database,Tabelle,PK_Liste,PK_Name,Liste,Liste_Name):
+        from _108_MySQL_Funktionen import Spaltennamen_anzeigen
+        Connection, Cursor  = Connection, Connection.cursor()
+        Liste_Datentyp = 'DECIMAL (8,4)'
+
+        for i in range(0,len(Liste)):
+            PK_Wert      = PK_Liste[i]
+            PK_Wert      = PK_Wert.strftime('%Y-%m-%d')
+            Liste_Wert   = Liste[i]
+
+            if Liste_Name not in Spaltennamen_anzeigen(Connection, Database, Tabelle):
+                Command1        = f"ALTER TABLE {Database}.{Tabelle} ADD COLUMN {Liste_Name} {Liste_Datentyp};"
+                Cursor.execute   (Command1)
+                Command2        = f"UPDATE {Database}.{Tabelle} SET {Liste_Name} = {Liste_Wert} where {PK_Name} = '{PK_Wert}';"
+                Cursor.execute   (Command2)
+                Connection.commit()
+            else:
+                Command1        = f"UPDATE {Database}.{Tabelle} SET {Liste_Name} = {Liste_Wert} where {PK_Name} = '{PK_Wert}';"
+                Cursor.execute   (Command1)
+                Connection.commit()
+    #Liste_zu_Tabelle_mittels_PK_hinzufügen(Δconnection, Δdatabase_Dicunt, Δtabelle_Dicunt, ΔHandelstage_Dicunt,ΔPK_Name, ΔDicunt_Liste,ΔDicunt_Code)
+
+
+
+    from _108_MySQL_Funktionen import Tabelle_ausgeben, Spalte_ausgeben
+
+    def _1001(x):
+        return x+10
+    def _1002(x,y):
+        return x+10,y
+    def _1003(x):
+        return x+10
+
+    u = [_1001,_1002,_1003]
+
+    Funktionnamen_Liste_str = Spalte_ausgeben(Δconnection,Δdatabase_Extra,'_01_dicuntfunktionen','Dicunt_Codes_00')
+    def Str_to_Function(Str):
+        return globals()[Str]
+
+    def List_Str_to_List_Funktion(List_Str):
+        List_Funktion = []
+        for i in range(0,len(List_Str)):
+            if List_Str[i] is not None:
+                Function = globals()[List_Str[i]]
+                List_Funktion.append(Function)
+            else: pass
+
+        return List_Funktion
+    Funktionnamen_Liste_Funktion = List_Str_to_List_Funktion(Funktionnamen_Liste_str)
+    #print(Funktionnamen_Liste_Funktion)
+    #print(Funktionnamen_Liste_Funktion[0](2,[1,2,3])) 
+    pass

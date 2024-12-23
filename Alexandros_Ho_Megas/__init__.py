@@ -1,0 +1,1 @@
+from _100_Grund_Funktionen import Delete_List_Wert
